@@ -35,9 +35,17 @@ Budget: <N> rounds. At the cap: write SOLUTION.md with the best supported result
 Human gates (stop and ask, do not assume): <irreversible decisions, if any; else "none">.
 ````
 
+## Readiness states
+
+Every brief is in exactly one state: `DRAFT` (placeholders remain), `BLOCKED` (an input is not on this machine, or a dependency is unfinished), `NEEDS-YES` (complete and proven, waiting for the user's "yes, if verify.sh passed I would believe it"), `READY`. Only `READY` produces a `/deep-solve` paste block.
+
+`READY` requires all of: `check_brief.py` exits 0 for this brief; every Inputs path was proven in this session by a command whose first output line is recorded next to it; every dependency is `READY` or has a `SOLUTION.md`; the user's "yes" is quoted in `NOTES.md` under "Yes record"; human gates are written and nothing authorizes money, production writes, deletion, or third-party messages.
+
+The mechanical half is a script: `python3 <skill-directory>/scripts/check_brief.py ./.deep-solve-prep/BRIEFS.md --id <id>`. It checks the required sections (`Context:`, `Question:`, `Success criteria`, `Inputs`, `Constraints:`, `Out of scope:`, `Budget:`, `Human gates`), placeholders, two-action "and" in the question, vague adjectives without a number, purpose words, prime-agent vocabulary collisions, forbidden standing authorizations, conversation gates, unproven inputs, and an unnumbered budget. A fully worked `READY` brief is in [brief-example-ready.md](brief-example-ready.md); it passes the checker.
+
 ## Readiness checklist
 
-Check every line with the user. Mark each `[x]` only when it is true on this machine today.
+The human half. Check every line with the user. Mark each `[x]` only when it is true on this machine today.
 
 - [ ] One question, no "and", answerable supported / refuted / inconclusive.
 - [ ] Every criterion has a number, a named input, or a named command. No "robust", "durable", "intelligent", "sustainable" without a definition in numbers.

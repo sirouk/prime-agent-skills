@@ -25,7 +25,7 @@ Resolve that path relative to this `SKILL.md`, not the working repository.
 - `UNMANAGED`: continue; this copy is not self-updated.
 - `ERROR`: state that freshness could not be verified and continue with the installed skill.
 
-Never use `--force` unless the user explicitly authorizes overwriting local skill changes.
+Never use `--force` unless the user explicitly authorizes overwriting local skill changes. Do not report the freshness result to the user unless it is `UPDATED` or `LOCAL_DIRTY`; the other outcomes are silent. The updater may print `UPDATE_AVAILABLE` followed by `ERROR` when the upstream snapshot cannot be applied; treat that as `ERROR`.
 
 Facts about the harness (goal re-prompts, depth limit, digest ranking, auto-refine, compaction) are in [references/harness-mechanics.md](references/harness-mechanics.md). Facts cited below as `[H#]` point to rows in that table.
 

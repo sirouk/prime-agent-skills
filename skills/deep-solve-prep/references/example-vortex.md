@@ -71,9 +71,34 @@ Human gates: none (read-only run).
 5. What must survive the purge no matter what (becomes "do not modify").
 6. The rule for when real money is allowed, and whether it stays a manual step (recommended: yes, forever).
 
+## What the hand-off looked like
+
+After the user supplied the six answers, the data was at `/data/vortex/ohlcv` (proved by `du -sh`), the checker exited 0, and the user answered "yes" to the exact verify.sh question, the turn ended with the scoreboard and one paste block:
+
+````
+Scoreboard:
+DS-1  READY       ready
+DS-2  BLOCKED     depends on DS-1
+DS-3  BLOCKED     depends on DS-1
+DS-4  DRAFT       missing: known-bad reference, drawdown threshold
+
+Ready to fire: DS-1. Prerequisites done: data at /data/vortex/ohlcv (38G), repo at /root/vortex @ 9f3c2a1. Launch: `prime-agent --thinking max`.
+
+```
+/deep-solve Build the out-of-sample validation suite for the QFL strategy in Vortex (vectorbtpro + numba streaming implementation, TradingView-parity verified)
+
+Context: read ./.deep-solve-prep/CHARTER.md and ./.deep-solve-prep/NOTES.md first. This brief is DS-1 of 4; it depends on nothing.
+...
+Human gates: none (read-only run).
+```
+````
+
+The full DS-1 text is in [brief-example-ready.md](brief-example-ready.md). Nothing was printed for DS-2 through DS-4; they were not `READY`.
+
 ## Lessons this example teaches
 
 - The user's most valuable material (vision, purpose, history) is also the material that must be kept out of the brief. CHARTER.md is where it lives; the brief cites it.
 - The first brief is almost always "build the ruler". Nothing else can be verified until something trusted says good from bad.
 - Prerequisites are not briefs. Data on another machine blocks everything and only the user can fix it.
 - Anything touching money is a human gate, no matter how the user phrases the authorization.
+- A paste block is a promise. It appears once, for one brief, only when the gate is mechanically and humanly satisfied. Everything before that is a scoreboard and questions.

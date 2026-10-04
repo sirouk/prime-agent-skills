@@ -10,6 +10,8 @@ Load the `deep-solve-prep` skill now: read its `SKILL.md` from the skills invent
 
 This is a conversation. Ask me at most 5 numbered questions per turn and wait for my answers. Do not create a goal. Do not spawn children to explore, except one read-only survey child if the material points at a large repo or dataset. Do not start solving the problem.
 
-Write what you learn to ./.deep-solve-prep/ every turn (NOTES.md, then CHARTER.md, BRIEFS.md, PLAN.md). The output I want is one or more /deep-solve lines I can paste as they are, in run order, with the prerequisites I must do first.
+Write what you learn to ./.deep-solve-prep/ every turn (NOTES.md, then CHARTER.md, BRIEFS.md, PLAN.md). Every turn ends with the scoreboard (one line per brief with its state) and either numbered questions or a paste block.
+
+The output I want: for each brief, when and only when it is READY by the skill's gate (checker passes, inputs proven on this machine, my explicit "yes" to the verify.sh question), one fenced block containing the exact `/deep-solve ...` text I can copy and paste as it is, plus the prerequisites I must do first. Do not give me a rough `/deep-solve` line to "start with"; give me the scoreboard and the one question that would move it.
 
 Begin with Phase 1 of the skill: read whatever I pointed at, then ask.

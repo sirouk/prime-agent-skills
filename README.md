@@ -68,7 +68,7 @@ Each skill's `SKILL.md` has a `## Freshness` section. At the start of a run the 
 | `UPDATED skill=... commit=...` | Applied the update at the exact latest commit and verified the files. The agent rereads the skill. |
 | `LOCAL_DIRTY skill=... installed=... latest=... payload_dirty=... source_dirty=...` | Local edits (or a dirty source checkout at install time). Kept as is. |
 | `UNMANAGED skill=... update_check=skipped` | No manifest. Not self-updated. |
-| `ERROR skill=... reason=...` (exit 2) | For example `latest_commit_unavailable` (offline; the network guard is 10 seconds). |
+| `ERROR skill=... reason=...` (exit 2) | For example `latest_commit_unavailable` (offline; the network guard is 10 seconds), or `apply_failed_...` after an `UPDATE_AVAILABLE` line when the newer snapshot could not be applied. |
 
 Flags: `--apply`, `--force` (only with explicit user consent), `--from-checkout PATH` (use a local checkout as "latest").
 
