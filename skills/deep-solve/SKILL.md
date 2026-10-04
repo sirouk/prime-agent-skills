@@ -7,6 +7,24 @@ description: Runs a long, multi-angle attack on one hard problem using a persist
 
 A method for problems that will not fall to one attempt. Expect several failed attempts. Expect to change the frame of the problem more than once. Success means: a solution that passes an independent check, plus a written record of what was tried, what failed, and why.
 
+## Freshness
+
+Resolve the directory containing this `SKILL.md`, then run its updater exactly once at the start of the invocation. In prime-agent, run it through the Python REPL as `await bash("python3 <skill-directory>/scripts/update_check.py --apply")`. The shell form is:
+
+```bash
+python3 <skill-directory>/scripts/update_check.py --apply
+```
+
+Resolve that path relative to this `SKILL.md`, not the working repository.
+
+- `UP_TO_DATE`: continue.
+- `UPDATED`: reread the updated `SKILL.md` and references from disk completely, then continue without restarting or asking.
+- `LOCAL_DIRTY`: preserve the local skill, do not force an overwrite, state the skipped update briefly, and continue with the installed skill.
+- `UNMANAGED`: continue; this copy is not self-updated.
+- `ERROR`: state that freshness could not be verified and continue with the installed skill.
+
+Never use `--force` unless the user explicitly authorizes overwriting local skill changes.
+
 Facts about the harness (goal re-prompts, depth limit, digest ranking, auto-refine, compaction) are in [references/harness-mechanics.md](references/harness-mechanics.md). Facts cited below as `[H#]` point to rows in that table.
 
 Reference files:

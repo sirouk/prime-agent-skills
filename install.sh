@@ -1,200 +1,173 @@
-#!/usr/bin/env bash
-# Installer for the deep-solve skill and /deep-solve prompt template (prime-agent).
+#!/bin/sh
+# Install or update prime-agent skills (and their /slash prompt templates).
 #
-#   curl -fsSL https://raw.githubusercontent.com/sirouk/prime-agent-deep-solve/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/sirouk/prime-agent-skills/main/install.sh | sh
 #
-# Change the GitHub owner/repo in ONE place: DEEP_SOLVE_DEFAULT_REPO below
-# (or set DEEP_SOLVE_REPO in the environment).
-set -euo pipefail
+# The shell entrypoint only resolves a frozen source snapshot (an exact commit).
+# All copying, manifests, and uninstall logic lives in scripts/install.py from
+# that same snapshot.
+set -eu
 
-DEEP_SOLVE_DEFAULT_REPO="sirouk/prime-agent-deep-solve"
-
-REPO="${DEEP_SOLVE_REPO:-$DEEP_SOLVE_DEFAULT_REPO}"
-REF="${DEEP_SOLVE_REF:-main}"
-SOURCE_DIR="${DEEP_SOLVE_SOURCE_DIR:-}"
-AGENT_DIR="${PRIME_AGENT_DIR:-$HOME/.prime/agent}"
-
-MODE="install"
-SCOPE="user"
+# The GitHub owner/repo lives here, and only here (override with the env var).
+SOURCE="${PRIME_AGENT_SKILLS_SOURCE:-https://github.com/sirouk/prime-agent-skills.git}"
+REF="${PRIME_AGENT_SKILLS_REF:-main}"
+COMMIT="${PRIME_AGENT_SKILLS_COMMIT:-}"
+SOURCE_DIR="${PRIME_AGENT_SKILLS_SOURCE_DIR:-}"
 
 usage() {
-  cat <<EOF
-Install the deep-solve skill and /deep-solve prompt template for prime-agent.
+  cat <<'EOF'
+Install prime-agent skills and prompt templates from sirouk/prime-agent-skills.
 
-Usage: install.sh [--project] [--uninstall] [-h|--help]
+Usage: install.sh [--skills LIST] [--list] [--project] [--uninstall] [--force] [-h|--help]
 
 Options:
-  --project     Install into ./.prime/agent/ (current directory) instead of the user dir.
-  --uninstall   Remove skills/deep-solve and prompts/deep-solve.md from the target dir.
-  -h, --help    Show this help.
+  --skills LIST   Comma-separated skill slugs to act on (default: all).
+  --list          Print the skills in the snapshot and exit.
+  --project       Use ./.prime/agent/ in the current directory instead of the user dir.
+  --uninstall     Remove installed skills and prompts that this installer manages.
+  --force         Overwrite locally modified installed skills.
+  -h, --help      Show this help.
 
 Environment:
-  PRIME_AGENT_DIR         Target agent dir (default: \$HOME/.prime/agent).
-  DEEP_SOLVE_REPO         GitHub owner/repo (default: $DEEP_SOLVE_DEFAULT_REPO).
-  DEEP_SOLVE_REF          Branch, tag, or commit to download (default: main).
-  DEEP_SOLVE_SOURCE_DIR   Install from this local checkout instead of downloading.
+  PRIME_AGENT_DIR                Agent dir (default: $HOME/.prime/agent).
+  PRIME_AGENT_SKILLS_SOURCE      Git URL of the source (default: https://github.com/sirouk/prime-agent-skills.git).
+  PRIME_AGENT_SKILLS_REF         Branch, tag, or commit to install (default: main).
+  PRIME_AGENT_SKILLS_COMMIT      Pin a full 40-hex commit (skips ref resolution).
+  PRIME_AGENT_SKILLS_SOURCE_DIR  Install from this local checkout instead of downloading.
+  PRIME_AGENT_SKILLS_DEST        Skills destination (default: $PRIME_AGENT_DIR/skills).
+                                 Prompts then go to <DEST parent>/prompts.
+  PRIME_AGENT_SKILLS_FORCE=1     Same as --force.
 
-Alternative: prime-agent package install https://github.com/$REPO
+Needs python3. A remote install also needs curl and tar. No sudo.
+Run /reload in open prime-agent sessions after installing.
 EOF
 }
 
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+  esac
+done
+
 die() {
-  echo "error: $*" >&2
+  printf 'ERROR: %s\n' "$*" >&2
   exit 1
 }
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --uninstall) MODE="uninstall" ;;
-    --project) SCOPE="project" ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+is_full_sha() {
+  case "${1:-}" in
+    *[!0-9a-fA-F]*|'') return 1 ;;
+    *) [ "${#1}" -eq 40 ] ;;
   esac
-  shift
-done
-
-if [ "$SCOPE" = "project" ]; then
-  AGENT_DIR="$PWD/.prime/agent"
-fi
-
-SKILL_DEST="$AGENT_DIR/skills/deep-solve"
-PROMPT_DEST="$AGENT_DIR/prompts/deep-solve.md"
-
-if [ "$MODE" = "uninstall" ]; then
-  rm -rf "$SKILL_DEST" "$PROMPT_DEST"
-  echo "Removed:"
-  echo "  $SKILL_DEST"
-  echo "  $PROMPT_DEST"
-  echo "Run /reload in open prime-agent sessions."
-  exit 0
-fi
-
-TMP_DIR=""
-STAGE_PATHS=""
-cleanup() {
-  if [ -n "$TMP_DIR" ]; then
-    rm -rf "$TMP_DIR"
-  fi
-  if [ -n "$STAGE_PATHS" ]; then
-    # STAGE_PATHS holds newline-separated paths; none contain newlines.
-    old_ifs="$IFS"
-    IFS='
-'
-    for p in $STAGE_PATHS; do
-      rm -rf "$p"
-    done
-    IFS="$old_ifs"
-  fi
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/deep-solve-install.XXXXXX")"
-
-download() {
-  # download <url> <output file>
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$1" -o "$2"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$2" "$1"
-  else
-    die "need curl or wget to download the package"
-  fi
 }
 
-command -v tar >/dev/null 2>&1 || [ -n "$SOURCE_DIR" ] || die "tar is required"
+normalize_sha() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
 
+github_repo_from_source() {
+  printf '%s' "$1" | sed -nE 's#^(https://github.com/|git@github.com:)([^/]+/[^/.]+)(\.git)?$#\2#p'
+}
+
+remote_commit() {
+  source_url="$1"
+  source_ref="$2"
+  resolved=""
+
+  if is_full_sha "$source_ref"; then
+    normalize_sha "$source_ref"
+    return 0
+  fi
+
+  if command -v git >/dev/null 2>&1; then
+    resolved="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$source_url" "$source_ref" 2>/dev/null | awk 'NR == 1 {print $1}')"
+  fi
+  if is_full_sha "$resolved"; then
+    normalize_sha "$resolved"
+    return 0
+  fi
+
+  repo="$(github_repo_from_source "$source_url")"
+  if [ -n "$repo" ] && command -v curl >/dev/null 2>&1; then
+    resolved="$(curl -fsSL "https://api.github.com/repos/$repo/commits/$source_ref" 2>/dev/null |
+      sed -n 's/^[[:space:]]*"sha": "\([0-9a-fA-F][0-9a-fA-F]*\)",[[:space:]]*$/\1/p' |
+      head -n 1)"
+    if is_full_sha "$resolved"; then
+      normalize_sha "$resolved"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+SCRIPT_DIR=""
 if [ -n "$SOURCE_DIR" ]; then
-  [ -d "$SOURCE_DIR" ] || die "DEEP_SOLVE_SOURCE_DIR is not a directory: $SOURCE_DIR"
-  SRC_ROOT="$(cd "$SOURCE_DIR" && pwd)"
-  ORIGIN="local checkout $SRC_ROOT"
-else
-  URL="https://github.com/$REPO/archive/$REF.tar.gz"
-  echo "Downloading $URL"
-  download "$URL" "$TMP_DIR/pkg.tar.gz" || die "download failed: $URL"
-  mkdir -p "$TMP_DIR/extract"
-  tar -xzf "$TMP_DIR/pkg.tar.gz" -C "$TMP_DIR/extract" || die "could not extract the archive"
-  SRC_ROOT=""
-  for d in "$TMP_DIR"/extract/*/; do
-    if [ -d "$d" ]; then
-      SRC_ROOT="${d%/}"
-      break
-    fi
-  done
-  [ -n "$SRC_ROOT" ] || die "archive is empty: $URL"
-  ORIGIN="$URL"
+  SCRIPT_DIR="$(CDPATH='' cd -- "$SOURCE_DIR" 2>/dev/null && pwd || true)"
+  [ -n "$SCRIPT_DIR" ] || die "PRIME_AGENT_SKILLS_SOURCE_DIR is not a directory: $SOURCE_DIR"
+elif [ -n "${BASH_SOURCE:-}" ]; then
+  SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$BASH_SOURCE")" 2>/dev/null && pwd || true)"
+elif [ -f "$0" ]; then
+  SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || true)"
 fi
 
-[ -d "$SRC_ROOT/skills/deep-solve" ] || die "missing skills/deep-solve in $ORIGIN"
-[ -f "$SRC_ROOT/prompts/deep-solve.md" ] || die "missing prompts/deep-solve.md in $ORIGIN"
+command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
-# skill_name <SKILL.md>: print the frontmatter `name:` value.
-skill_name() {
-  awk '
-    NR == 1 { if ($0 ~ /^---[ \t\r]*$/) { infm = 1; next } else { exit } }
-    infm && /^---[ \t\r]*$/ { exit }
-    infm && /^name:/ {
-      v = $0
-      sub(/^name:[ \t]*/, "", v)
-      sub(/[ \t\r]+$/, "", v)
-      gsub(/^["\047]|["\047]$/, "", v)
-      print v
-      exit
-    }
-  ' "$1"
-}
-
-validate_skill_dir() {
-  [ -f "$1/SKILL.md" ] || die "SKILL.md not found in $1"
-  found="$(skill_name "$1/SKILL.md")"
-  [ "$found" = "deep-solve" ] || die "SKILL.md frontmatter name is '$found', expected 'deep-solve'"
-}
-
-# replace_path <staged> <dest>: swap a staged copy into place.
-replace_path() {
-  staged="$1"
-  dest="$2"
-  backup="$dest.old.$$"
-  STAGE_PATHS="$STAGE_PATHS
-$backup"
-  if [ -e "$dest" ] || [ -L "$dest" ]; then
-    mv "$dest" "$backup"
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/scripts/install.py" ]; then
+  if [ -z "$COMMIT" ] && [ -d "$SCRIPT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+    COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)"
   fi
-  if ! mv "$staged" "$dest"; then
-    if [ -e "$backup" ]; then
-      mv "$backup" "$dest"
+  if [ -z "$COMMIT" ]; then
+    COMMIT="$(remote_commit "$SOURCE" "$REF" || true)"
+  fi
+  COMMIT="$(normalize_sha "$COMMIT")"
+  is_full_sha "$COMMIT" || die "could not resolve a full source commit"
+
+  SOURCE_DIRTY="${PRIME_AGENT_SKILLS_SOURCE_DIRTY:-}"
+  if [ -z "$SOURCE_DIRTY" ]; then
+    SOURCE_DIRTY="false"
+    if [ -d "$SCRIPT_DIR/.git" ] && command -v git >/dev/null 2>&1 &&
+       [ -n "$(git -C "$SCRIPT_DIR" status --porcelain 2>/dev/null || true)" ]; then
+      SOURCE_DIRTY="true"
     fi
-    die "could not install $dest"
   fi
-  rm -rf "$backup"
+
+  exec python3 "$SCRIPT_DIR/scripts/install.py" \
+    --source-root "$SCRIPT_DIR" \
+    --source-url "$SOURCE" \
+    --ref "$REF" \
+    --commit "$COMMIT" \
+    --source-dirty "$SOURCE_DIRTY" \
+    "$@"
+fi
+
+command -v curl >/dev/null 2>&1 || die "curl is required for a remote install"
+command -v tar >/dev/null 2>&1 || die "tar is required for a remote install"
+
+if [ -z "$COMMIT" ]; then
+  COMMIT="$(remote_commit "$SOURCE" "$REF" || true)"
+fi
+COMMIT="$(normalize_sha "$COMMIT")"
+is_full_sha "$COMMIT" || die "could not resolve a full source commit for $SOURCE $REF"
+
+REPO="$(github_repo_from_source "$SOURCE")"
+[ -n "$REPO" ] || die "remote installation currently requires a GitHub source URL"
+
+TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/prime-agent-skills-install.XXXXXX")"
+cleanup() {
+  rm -rf "$TEMP_ROOT"
 }
+trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$AGENT_DIR/skills" "$AGENT_DIR/prompts"
+mkdir -p "$TEMP_ROOT/source"
+curl -fsSL --retry 3 "https://github.com/$REPO/archive/$COMMIT.tar.gz" -o "$TEMP_ROOT/source.tar.gz"
+tar -xzf "$TEMP_ROOT/source.tar.gz" -C "$TEMP_ROOT/source" --strip-components=1
+[ -f "$TEMP_ROOT/source/scripts/install.py" ] || die "downloaded source snapshot is incomplete"
 
-SKILL_STAGE="$SKILL_DEST.new.$$"
-PROMPT_STAGE="$PROMPT_DEST.new.$$"
-STAGE_PATHS="$SKILL_STAGE
-$PROMPT_STAGE"
-
-rm -rf "$SKILL_STAGE" "$PROMPT_STAGE"
-cp -R "$SRC_ROOT/skills/deep-solve" "$SKILL_STAGE"
-cp "$SRC_ROOT/prompts/deep-solve.md" "$PROMPT_STAGE"
-
-validate_skill_dir "$SKILL_STAGE"
-
-replace_path "$SKILL_STAGE" "$SKILL_DEST"
-replace_path "$PROMPT_STAGE" "$PROMPT_DEST"
-
-validate_skill_dir "$SKILL_DEST"
-[ -f "$PROMPT_DEST" ] || die "prompt template missing after install: $PROMPT_DEST"
-
-echo "Installed ($SCOPE scope) from $ORIGIN:"
-echo "  skill:  $SKILL_DEST"
-(cd "$SKILL_DEST" && find . -type f | sort | sed 's|^\./|          |')
-echo "  prompt: $PROMPT_DEST"
-echo
-echo "Next steps:"
-echo "  - Run /reload in open prime-agent sessions."
-echo "  - Use \`/deep-solve <problem>\` or just describe a hard problem."
-echo "  - Alternative: prime-agent package install https://github.com/$REPO"
+python3 "$TEMP_ROOT/source/scripts/install.py" \
+  --source-root "$TEMP_ROOT/source" \
+  --source-url "$SOURCE" \
+  --ref "$REF" \
+  --commit "$COMMIT" \
+  --source-dirty false \
+  "$@"
