@@ -43,8 +43,8 @@ After installing, run `/reload` in open prime-agent sessions.
 1. `install.sh` (POSIX sh) resolves `main` to a full commit (`git ls-remote`, with a GitHub API fallback) and downloads that exact commit's tarball.
 2. `scripts/install.py` (stdlib Python 3.9+) copies each skill to a staging directory, writes `.prime-agent-skills-install.json` (`schema`, `skill`, `source`, `ref`, `commit`, `source_dirty`, `installed_at`, `files`), verifies the staged files against the sha256 snapshot, and swaps it in with `os.replace` (with backup and rollback).
 3. Same files and same commit: `unchanged`. A skill you edited locally is `skipped` unless you pass `--force`. A directory with the same slug but no manifest is yours, not ours: it is `skipped` too, unless it is byte-identical to what would be installed (then it is adopted by adding the manifest) or you pass `--force`.
-5. The same rule holds for prompts: a `prompts/<slug>.md` you wrote yourself, or one of ours you edited, is never overwritten or removed without `--force`.
 4. Prompts are copied to `~/.prime/agent/prompts/` and recorded in `~/.prime/agent/skills/.prime-agent-skills-prompts.json`, so `--uninstall` knows what to remove.
+5. The same rule holds for prompts: a `prompts/<slug>.md` you wrote yourself, or one of ours you edited, is never overwritten or removed without `--force`.
 
 Environment: `PRIME_AGENT_DIR` (default `$HOME/.prime/agent`), `PRIME_AGENT_SKILLS_SOURCE` (default `https://github.com/sirouk/prime-agent-skills.git`), `PRIME_AGENT_SKILLS_REF` (default `main`), `PRIME_AGENT_SKILLS_COMMIT` (pin a commit), `PRIME_AGENT_SKILLS_SOURCE_DIR` (install from a local checkout), `PRIME_AGENT_SKILLS_DEST` (skills destination; default `$PRIME_AGENT_DIR/skills`), `PRIME_AGENT_SKILLS_FORCE=1`. The owner/repo default is set once, at the top of `install.sh`.
 
