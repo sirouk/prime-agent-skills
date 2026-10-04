@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -71,7 +72,8 @@ class InstallerTests(TempDirMixin, unittest.TestCase):
         edited.write_text(edited.read_text() + "\nlocal edit\n")
         result = self.install()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("skipped (locally modified)", result.stdout)
+        self.assertIn("skill  deep-solve: skipped", result.stdout)
+        self.assertIn("locally modified at", result.stdout)
         self.assertIn("local edit", edited.read_text())
         result = self.install("--force")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -82,18 +84,66 @@ class InstallerTests(TempDirMixin, unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("local edit", edited.read_text())
 
-    def test_adopts_unmanaged_copy(self):
+    def test_unmanaged_different_skill_is_never_replaced_without_force(self):
+        # A user's own skill that happens to share our slug (no manifest) is data, not ours.
         self.skill.mkdir(parents=True)
-        (self.skill / "SKILL.md").write_text("---\nname: deep-solve\ndescription: old v1 copy\n---\n")
-        (self.skill / "stale.txt").write_text("stale")
+        (self.skill / "SKILL.md").write_text("---\nname: deep-solve\ndescription: the user's own skill\n---\n")
+        (self.skill / "notes.txt").write_text("precious")
+        before = snapshot(self.skill)
         result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("skill  deep-solve: skipped", result.stdout)
+        self.assertIn("not installed by this tool", result.stdout)
+        self.assertEqual(snapshot(self.skill), before)
+        self.assertFalse((self.skill / MANIFEST).exists())
+        result = self.install("--force")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("adopted unmanaged copy", result.stdout)
-        self.assertFalse((self.skill / "stale.txt").exists())
+        self.assertIn("replaced unmanaged copy (--force)", result.stdout)
+        self.assertFalse((self.skill / "notes.txt").exists())
         self.assertEqual(
             snapshot(self.skill, {MANIFEST}), snapshot(self.checkout / "skills" / "deep-solve")
         )
+
+    def test_identical_unmanaged_copy_is_adopted(self):
+        # The package-install / pre-manifest case: same bytes, so adopting only adds the manifest.
+        shutil.copytree(self.checkout / "skills" / "deep-solve", self.skill)
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("adopted identical unmanaged copy", result.stdout)
         self.assertTrue((self.skill / MANIFEST).is_file())
+        self.assertEqual(
+            snapshot(self.skill, {MANIFEST}), snapshot(self.checkout / "skills" / "deep-solve")
+        )
+
+    def test_users_own_prompt_is_never_overwritten_or_removed_without_force(self):
+        prompts = self.agent / "prompts"
+        prompts.mkdir(parents=True)
+        own = prompts / "deep-solve.md"
+        own.write_text("the user's own prompt\n")
+        result = self.install()
+        self.assertIn("prompt /deep-solve: skipped (not installed by this tool", result.stdout)
+        self.assertEqual(own.read_text(), "the user's own prompt\n")
+        result = self.install("--uninstall")
+        self.assertEqual(own.read_text(), "the user's own prompt\n")
+        self.assertNotIn("prompt /deep-solve: removed", result.stdout)
+        result = self.install("--force")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("prompt /deep-solve: installed", result.stdout)
+        self.assertEqual(own.read_bytes(), (self.checkout / "prompts" / "deep-solve.md").read_bytes())
+
+    def test_edited_installed_prompt_is_kept_without_force(self):
+        self.install()
+        installed = self.agent / "prompts" / "deep-solve.md"
+        installed.write_text(installed.read_text() + "\nmy tweak\n")
+        result = self.install()
+        self.assertIn("prompt /deep-solve: skipped (locally modified", result.stdout)
+        self.assertIn("my tweak", installed.read_text())
+        result = self.install("--uninstall")
+        self.assertIn("prompt /deep-solve: skipped (locally modified", result.stdout)
+        self.assertTrue(installed.exists())
+        result = self.install("--uninstall", "--force")
+        self.assertIn("prompt /deep-solve: removed", result.stdout)
+        self.assertFalse(installed.exists())
 
     def test_project_scope(self):
         project = self.tmp / "project"

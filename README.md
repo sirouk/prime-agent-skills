@@ -41,10 +41,20 @@ After installing, run `/reload` in open prime-agent sessions.
 
 1. `install.sh` (POSIX sh) resolves `main` to a full commit (`git ls-remote`, with a GitHub API fallback) and downloads that exact commit's tarball.
 2. `scripts/install.py` (stdlib Python 3.9+) copies each skill to a staging directory, writes `.prime-agent-skills-install.json` (`schema`, `skill`, `source`, `ref`, `commit`, `source_dirty`, `installed_at`, `files`), verifies the staged files against the sha256 snapshot, and swaps it in with `os.replace` (with backup and rollback).
-3. Same files and same commit: `unchanged`. A skill you edited locally is `skipped (locally modified)` unless you pass `--force`. An existing copy with no manifest is adopted (replaced), but only when its slug is one of ours.
+3. Same files and same commit: `unchanged`. A skill you edited locally is `skipped` unless you pass `--force`. A directory with the same slug but no manifest is yours, not ours: it is `skipped` too, unless it is byte-identical to what would be installed (then it is adopted by adding the manifest) or you pass `--force`.
+5. The same rule holds for prompts: a `prompts/<slug>.md` you wrote yourself, or one of ours you edited, is never overwritten or removed without `--force`.
 4. Prompts are copied to `~/.prime/agent/prompts/` and recorded in `~/.prime/agent/skills/.prime-agent-skills-prompts.json`, so `--uninstall` knows what to remove.
 
 Environment: `PRIME_AGENT_DIR` (default `$HOME/.prime/agent`), `PRIME_AGENT_SKILLS_SOURCE` (default `https://github.com/sirouk/prime-agent-skills.git`), `PRIME_AGENT_SKILLS_REF` (default `main`), `PRIME_AGENT_SKILLS_COMMIT` (pin a commit), `PRIME_AGENT_SKILLS_SOURCE_DIR` (install from a local checkout), `PRIME_AGENT_SKILLS_DEST` (skills destination; default `$PRIME_AGENT_DIR/skills`), `PRIME_AGENT_SKILLS_FORCE=1`. The owner/repo default is set once, at the top of `install.sh`.
+
+### What it will never do
+
+- Write outside `$PRIME_AGENT_DIR/skills/`, `$PRIME_AGENT_DIR/prompts/`, and a temp dir it removes on exit. No sudo, no shell profile edits, no settings changes.
+- Replace or delete a skill or prompt it did not install, or one you edited, without `--force`.
+- Run anything from the network except the pinned commit's `scripts/install.py`. The entrypoint resolves `main` to a commit first and downloads that commit's tarball, so the manifest's `commit` is always the code you got.
+- Follow symlinks in skill directories (it refuses them).
+
+Requirements: `python3` 3.9 or newer, `sh`. Remote install also needs `curl` and `tar`. `git` is optional (used to resolve the commit; the GitHub API is the fallback). Tested on Linux (dash, bash) and macOS in CI.
 
 ## Self-update
 
@@ -124,3 +134,16 @@ Verified against prime-agent 0.9.8. The full table with source files is in [skil
 ## Customize
 
 Edit `skills/<slug>/SKILL.md` in your fork and change the source default at the top of `install.sh`. An edited installed copy is kept by the installer and the updater (`LOCAL_DIRTY`) until you pass `--force`.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 scripts/sync_skill_payloads.py --check
+```
+
+The suite uses throwaway git repos in temp dirs and never touches the network or your real `~/.prime/agent`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

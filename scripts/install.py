@@ -216,7 +216,16 @@ def plan_skill(source: Source, slug: str, destination: Path, force: bool) -> Pla
     current = tree_snapshot(destination, {SKILL_MANIFEST})
     metadata = read_json(destination / SKILL_MANIFEST)
     if metadata is None:
-        return Plan(slug, source_dir, destination, files, "installed", "adopted unmanaged copy")
+        if current == files:
+            # Byte-identical to what we would install: adopting it only adds the manifest.
+            return Plan(slug, source_dir, destination, files, "installed", "adopted identical unmanaged copy")
+        if not force:
+            return Plan(
+                slug, source_dir, destination, files, "skipped",
+                f"unmanaged skill already exists at {destination} (no manifest, not installed by this tool); "
+                "move it away, or rerun with --force to replace it",
+            )
+        return Plan(slug, source_dir, destination, files, "installed", "replaced unmanaged copy (--force)")
     recorded = metadata.get("files")
     recorded_snapshot = (
         {str(key): str(value) for key, value in recorded.items()}
@@ -358,7 +367,7 @@ def run_install(options: Options) -> int:
             apply_skill(plan, source)
         if plan.action == "skipped":
             skipped += 1
-            print(f"  skill  {plan.slug}: skipped (locally modified)")
+            print(f"  skill  {plan.slug}: skipped")
             print(f"         {plan.note}")
         else:
             suffix = f" ({plan.note})" if plan.note else ""
@@ -371,9 +380,25 @@ def run_install(options: Options) -> int:
         print(f"Prompts dir: {prompts_dir}")
     for name in prompt_names:
         data = (source.root / "prompts" / name).read_bytes()
-        changed = atomic_write_bytes(prompts_dir / name, data)
-        recorded_prompts[name] = hashlib.sha256(data).hexdigest()
-        print(f"  prompt /{name[:-3]}: {'installed' if changed else 'unchanged'}")
+        target = prompts_dir / name
+        new_hash = hashlib.sha256(data).hexdigest()
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise InstallError(f"prompt destination is not a regular file: {target}")
+        if target.is_file():
+            current_hash = file_sha256(target)
+            recorded_hash = recorded_prompts.get(name)
+            if current_hash == new_hash:
+                recorded_prompts[name] = new_hash
+                print(f"  prompt /{name[:-3]}: unchanged")
+                continue
+            if current_hash != recorded_hash and not options.force:
+                skipped += 1
+                who = "locally modified" if recorded_hash else "not installed by this tool"
+                print(f"  prompt /{name[:-3]}: skipped ({who} at {target}; rerun with --force to overwrite)")
+                continue
+        atomic_write_bytes(target, data)
+        recorded_prompts[name] = new_hash
+        print(f"  prompt /{name[:-3]}: installed")
     if prompt_names:
         write_prompts_manifest(prompts_manifest_path, source, recorded_prompts)
 
@@ -423,19 +448,23 @@ def run_uninstall(options: Options) -> int:
     prompts_manifest_path = skills_dest / PROMPTS_MANIFEST
     recorded = load_prompts_manifest(prompts_manifest_path)
     recorded_prompts = {str(k): str(v) for k, v in recorded["prompts"].items()}
+    # Only prompts this tool recorded are candidates; a prompt file the user wrote
+    # (same name, never installed by us) is never touched.
     names = {
         name for name in recorded_prompts
         if everything or name[:-3] in selected
     }
-    names |= {
-        name for name in discover_prompts(source.root)
-        if prompt_selected(name, selected, everything, available)
-    }
     for name in sorted(names):
         target = prompts_dir / name
-        if target.is_file() and not target.is_symlink():
-            target.unlink()
-            print(f"  prompt /{name[:-3]}: removed")
+        if not target.is_file() or target.is_symlink():
+            recorded_prompts.pop(name, None)
+            continue
+        if file_sha256(target) != recorded_prompts[name] and not options.force:
+            skipped += 1
+            print(f"  prompt /{name[:-3]}: skipped (locally modified; use --force to remove)")
+            continue
+        target.unlink()
+        print(f"  prompt /{name[:-3]}: removed")
         recorded_prompts.pop(name, None)
     write_prompts_manifest(prompts_manifest_path, source, recorded_prompts)
     print("Run /reload in open prime-agent sessions.")

@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Shell syntax (sh and bash)
+        run: |
+          sh -n install.sh
+          bash -n install.sh
+      - name: Updater copies in sync
+        run: python3 scripts/sync_skill_payloads.py --check
+      - name: Skill frontmatter
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          from pathlib import Path
+          ok = True
+          for skill in Path("skills").iterdir():
+              text = (skill / "SKILL.md").read_text()
+              fm = re.search(r"^---\n(.*?)\n---\n", text, re.S)
+              name = re.search(r"^name: (.+)$", fm.group(1), re.M).group(1).strip()
+              desc = re.search(r"^description: (.+)$", fm.group(1), re.M).group(1).strip()
+              if name != skill.name or not desc or len(desc) > 1024:
+                  print(f"bad frontmatter in {skill}: name={name!r} desc_len={len(desc)}"); ok = False
+          sys.exit(0 if ok else 1)
+          EOF
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Install from this checkout into a temp agent dir, then uninstall
+        run: |
+          export PRIME_AGENT_DIR="$RUNNER_TEMP/agent"
+          sh install.sh
+          test -f "$PRIME_AGENT_DIR/skills/deep-solve/SKILL.md"
+          test -f "$PRIME_AGENT_DIR/prompts/deep-solve.md"
+          python3 "$PRIME_AGENT_DIR/skills/deep-solve/scripts/update_check.py" --from-checkout . | tee /dev/stderr | grep -q '^UP_TO_DATE '
+          sh install.sh --uninstall
+          test ! -e "$PRIME_AGENT_DIR/skills/deep-solve"
+          test ! -e "$PRIME_AGENT_DIR/prompts/deep-solve.md"
