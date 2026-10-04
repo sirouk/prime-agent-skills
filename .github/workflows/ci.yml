@@ -45,9 +45,18 @@ jobs:
         run: |
           export PRIME_AGENT_DIR="$RUNNER_TEMP/agent"
           sh install.sh
-          test -f "$PRIME_AGENT_DIR/skills/deep-solve/SKILL.md"
-          test -f "$PRIME_AGENT_DIR/prompts/deep-solve.md"
-          python3 "$PRIME_AGENT_DIR/skills/deep-solve/scripts/update_check.py" --from-checkout . | tee /dev/stderr | grep -q '^UP_TO_DATE '
+          for dir in skills/*/; do
+            slug=$(basename "$dir")
+            test -f "$PRIME_AGENT_DIR/skills/$slug/SKILL.md"
+            python3 "$PRIME_AGENT_DIR/skills/$slug/scripts/update_check.py" --from-checkout . | tee /dev/stderr | grep -q '^UP_TO_DATE '
+          done
+          for file in prompts/*.md; do
+            test -f "$PRIME_AGENT_DIR/prompts/$(basename "$file")"
+          done
           sh install.sh --uninstall
-          test ! -e "$PRIME_AGENT_DIR/skills/deep-solve"
-          test ! -e "$PRIME_AGENT_DIR/prompts/deep-solve.md"
+          for dir in skills/*/; do
+            test ! -e "$PRIME_AGENT_DIR/skills/$(basename "$dir")"
+          done
+          for file in prompts/*.md; do
+            test ! -e "$PRIME_AGENT_DIR/prompts/$(basename "$file")"
+          done

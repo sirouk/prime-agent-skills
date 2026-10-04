@@ -7,6 +7,8 @@ description: Runs a long, multi-angle attack on one hard problem using a persist
 
 A method for problems that will not fall to one attempt. Expect several failed attempts. Expect to change the frame of the problem more than once. Success means: a solution that passes an independent check, plus a written record of what was tried, what failed, and why.
 
+If the problem has more than one question, no checkable success criteria, or inputs that are not on this machine yet, stop and run the `deep-solve-prep` skill first (`/deep-solve-prep <material>`). It produces `./.deep-solve-prep/BRIEFS.md` with briefs shaped for this skill; a brief that still contains `<...>` placeholders is not ready.
+
 ## Freshness
 
 Resolve the directory containing this `SKILL.md`, then run its updater exactly once at the start of the invocation. In prime-agent, run it through the Python REPL as `await bash("python3 <skill-directory>/scripts/update_check.py --apply")`. The shell form is:
@@ -54,6 +56,8 @@ Create it with `await goal.create(objective)`. Write the objective yourself. It 
 - the problem in one or two sentences, using the exact technical vocabulary of the domain (distinctive terms, names, identifiers). The goal objective is the strongest signal the harness uses to rank which memories it shows you later (goal terms weight 3.0, see [H4]), so vocabulary matters;
 - the concrete, checkable success criteria (what command, test, measurement, or proof decides "solved");
 - the hard constraints (time, resources, what must not change).
+
+If `./.deep-solve-prep/BRIEFS.md` and `CHARTER.md` exist, read them before writing the objective and reuse their vocabulary and criteria.
 
 Before creating it, run `await goal.get()`. If a goal already exists (`active`, `paused`, or `budget_limited`), `goal.create()` fails [H12]. Do not work around it: tell the user in one line to run `/goal clear` (or `/goal resume` if they want the old one), then wait. A `complete` or `error` goal is replaced automatically.
 

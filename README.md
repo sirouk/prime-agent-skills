@@ -6,6 +6,7 @@ Skills for [prime-agent](https://github.com/PrimeIntellect-ai/prime-agent). Each
 
 | Slug | Purpose | Trigger phrases |
 |---|---|---|
+| `deep-solve-prep` | Conversation that turns a vision, charter, or messy problem into sharp `/deep-solve` briefs: one question each, checkable success criteria, data and constraints, `verify.sh` sketch. Writes `./.deep-solve-prep/{CHARTER,BRIEFS,PLAN}.md`. Run it first. Slash command: `/deep-solve-prep <material>`. | "help me prepare a deep-solve", "turn this into a deep-solve prompt", "is this ready for /deep-solve", "scope this problem", "write the brief" |
 | `deep-solve` | Long, multi-angle attack on one hard problem: persistent goal, `./.deep-solve/` workspace, parallel subagents, continual harness, `red-team` verification. Slash command: `/deep-solve <problem>`. | "hard problem", "deep research", "multiple approaches", "try different angles", "unsolved", "keep trying until it works", "long-running investigation", "/deep-solve" |
 
 ## Install
@@ -70,6 +71,33 @@ Each skill's `SKILL.md` has a `## Freshness` section. At the start of a run the 
 | `ERROR skill=... reason=...` (exit 2) | For example `latest_commit_unavailable` (offline; the network guard is 10 seconds). |
 
 Flags: `--apply`, `--force` (only with explicit user consent), `--from-checkout PATH` (use a local checkout as "latest").
+
+## Workflow
+
+Run [`deep-solve-prep`](skills/deep-solve-prep/SKILL.md) first: `/deep-solve-prep <material>` starts a conversation about your vision, charter, or messy problem. It writes `./.deep-solve-prep/CHARTER.md`, `BRIEFS.md`, and `PLAN.md`. Then fire each `/deep-solve <brief>` from `BRIEFS.md` in run order. [`deep-solve`](skills/deep-solve/SKILL.md) reads `CHARTER.md` and `BRIEFS.md` when they exist and reuses their vocabulary and criteria. Skip the prep step only when you have one question with a checkable finish line.
+
+## Usage: deep-solve-prep
+
+- `/deep-solve-prep <material>`: the slash command. It sets `MATERIAL`, asks the agent to load the skill, and starts the conversation. It never creates a goal.
+- `/skill:deep-solve-prep`: load the skill directly.
+- Natural language: paste a vision or charter and ask "is this ready for /deep-solve?" or "scope this problem".
+
+What the agent does:
+
+1. Saturate: reads what you point at, then asks at most 5 numbered questions per turn.
+2. Decompose: splits the material into separate questions, prerequisites, and human gates.
+3. Sharpen each brief: one question, checkable success criteria, data and constraints, a `verify.sh` sketch.
+4. Review: checks every brief against the shape of a deep-solve-able problem.
+5. Hand off: writes the files, names the brief to fire first, and gives the exact `/deep-solve` line.
+
+The output, in `./.deep-solve-prep/`:
+
+| File | Purpose |
+|---|---|
+| `NOTES.md` | What the agent learned, written every turn. |
+| `CHARTER.md` | The vision, purpose, constraints, and human gates, in your voice. |
+| `BRIEFS.md` | The briefs in run order, each pasteable as `/deep-solve <brief>`. |
+| `PLAN.md` | Prerequisites, briefs in order, human gates, and what comes after. |
 
 ## Usage: deep-solve
 

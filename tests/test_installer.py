@@ -190,6 +190,50 @@ class InstallerTests(TempDirMixin, unittest.TestCase):
         self.assertIn("/deep-solve", result.stdout)
         self.assertFalse(self.agent.exists())
 
+    def test_installs_every_discovered_skill_and_prompt(self):
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        slugs = sorted(p.name for p in (self.checkout / "skills").iterdir() if p.is_dir())
+        prompts = sorted((self.checkout / "prompts").glob("*.md"))
+        self.assertTrue(slugs and prompts)
+        for slug in slugs:
+            installed = self.agent / "skills" / slug
+            self.assertTrue((installed / "SKILL.md").is_file(), slug)
+            manifest = json.loads((installed / MANIFEST).read_text())
+            self.assertEqual(manifest["skill"], slug)
+            self.assertEqual(manifest["files"], snapshot(installed, {MANIFEST}), slug)
+            self.assertEqual(manifest["files"], snapshot(self.checkout / "skills" / slug), slug)
+        for prompt in prompts:
+            installed_prompt = self.agent / "prompts" / prompt.name
+            self.assertEqual(installed_prompt.read_bytes(), prompt.read_bytes(), prompt.name)
+        recorded = json.loads((self.agent / "skills" / PROMPTS_MANIFEST).read_text())
+        for prompt in prompts:
+            self.assertIn(prompt.name, recorded["prompts"])
+
+    def test_skills_flag_selects_only_named_skill_and_its_prompt(self):
+        result = self.install("--skills", "deep-solve-prep")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        prep = self.agent / "skills" / "deep-solve-prep"
+        self.assertTrue((prep / "SKILL.md").is_file())
+        self.assertTrue((prep / MANIFEST).is_file())
+        self.assertEqual(
+            (self.agent / "prompts" / "deep-solve-prep.md").read_bytes(),
+            (self.checkout / "prompts" / "deep-solve-prep.md").read_bytes(),
+        )
+        self.assertFalse(self.skill.exists())
+        self.assertFalse((self.agent / "prompts" / "deep-solve.md").exists())
+        self.assertEqual(
+            sorted(p.name for p in (self.agent / "prompts").iterdir()), ["deep-solve-prep.md"]
+        )
+
+    def test_list_shows_all_skills(self):
+        result = self.install("--list")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for slug in ("deep-solve", "deep-solve-prep"):
+            self.assertRegex(result.stdout, rf"(?m)^  {slug}  ")
+            self.assertRegex(result.stdout, rf"(?m)^  /{slug}$")
+        self.assertFalse(self.agent.exists())
+
     def test_skills_selection(self):
         extra = self.checkout / "skills" / "second-skill"
         extra.mkdir()

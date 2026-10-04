@@ -28,6 +28,16 @@ class SkillSyncTests(TempDirMixin, unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.sync(root, "--check").returncode, 0)
 
+    def test_every_skill_has_an_updater_equal_to_the_source(self):
+        repo = Path(__file__).resolve().parent.parent
+        source = (repo / "scripts" / "skill_update.py").read_bytes()
+        skills = sorted(p for p in (repo / "skills").iterdir() if p.is_dir())
+        self.assertTrue(skills)
+        for skill in skills:
+            copy = skill / "scripts" / "update_check.py"
+            self.assertTrue(copy.is_file(), f"missing {copy}")
+            self.assertEqual(copy.read_bytes(), source, f"{copy} differs from scripts/skill_update.py")
+
     def test_check_fails_when_copy_missing(self):
         root = make_checkout(self.tmp)
         (root / "skills" / "deep-solve" / "scripts" / "update_check.py").unlink()
