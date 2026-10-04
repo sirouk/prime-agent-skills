@@ -50,7 +50,7 @@ Pick, do not recite. At most 5 per turn, numbered, each one chosen because its a
 | "Deploy", "put capital to use", "delete the old", "email the team" inside a brief. | Human gate. Remove from brief; put in PLAN.md with "manual step". |
 | "Make no mistakes", "be perfect", "the most intelligent approach". | Replace with checkable commitments: "every claim is backed by a test in the repo", "every negative result is recorded in LOG.md". |
 | Tool vocabulary collisions (prime-agent: kernel, skill, goal, harness, memory, compact, refine). | Rename the user's concept in the brief and note the rename in CHARTER.md. |
-| A brief longer than one screen. | It is a charter, not a brief. Decompose again. |
+| A brief whose Question or Success criteria run longer than one screen. | It is a charter, not a brief. Decompose again. (The Inputs and Constraints sections may be long; proof notes and pinned paths take space.) |
 | "Ask me questions" or "when I say GO" inside a brief. | Prep is the conversation. The brief is fired after it. Remove the phase gates from the brief. |
 
 ## Phase 5: Hand off

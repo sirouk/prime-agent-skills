@@ -19,13 +19,13 @@ python3 <skill-directory>/scripts/update_check.py --apply
 
 Resolve that path relative to this `SKILL.md`, not the working repository.
 
-- `UP_TO_DATE`: continue.
-- `UPDATED`: reread the updated `SKILL.md` and references from disk completely, then continue without restarting or asking.
-- `LOCAL_DIRTY`: preserve the local skill, do not force an overwrite, state the skipped update briefly, and continue with the installed skill.
-- `UNMANAGED`: continue; this copy is not self-updated.
-- `ERROR`: state that freshness could not be verified and continue with the installed skill.
+- `UP_TO_DATE`: continue, silently.
+- `UPDATED`: reread the updated `SKILL.md` and references from disk completely, then continue without restarting or asking. Tell the user in one line.
+- `LOCAL_DIRTY`: preserve the local skill, do not force an overwrite, tell the user in one line that an update was skipped, and continue with the installed skill.
+- `UNMANAGED`: continue, silently; this copy is not self-updated.
+- `ERROR`: continue with the installed skill, silently. The updater may print `UPDATE_AVAILABLE` followed by `ERROR` when the upstream snapshot cannot be applied; that is `ERROR`.
 
-Never use `--force` unless the user explicitly authorizes overwriting local skill changes. Do not report the freshness result to the user unless it is `UPDATED` or `LOCAL_DIRTY`; `UP_TO_DATE`, `UNMANAGED`, and `ERROR` are silent. The updater may print `UPDATE_AVAILABLE` followed by `ERROR` when the upstream snapshot cannot be applied; treat that as `ERROR`.
+Never use `--force` unless the user explicitly authorizes overwriting local skill changes.
 
 Reference files:
 - [references/brief-template.md](references/brief-template.md): the exact shape of one brief and the readiness checklist.
@@ -61,8 +61,8 @@ A brief has exactly one of four states. Report the state of every brief at the e
 
 `READY` is mechanical, not a judgment. All of these must hold:
 
-1. `python3 <skill-directory>/scripts/check_brief.py ./.deep-solve-prep/BRIEFS.md --id <id>` exits 0. It fails on any `<...>` placeholder, any missing required section, any "and" in the Question, any adjective-without-a-number from the banned list in the Question or Success criteria, any purpose word, any prime-agent vocabulary collision, and any `/deep-solve` title under 8 words.
-2. Every path under Inputs was proven in THIS session by a command you ran or the user pasted (`ls`, `du -sh`, `head`, `git log -1`). Record the command and its first line of output next to the path. A path you did not see does not count.
+1. `python3 <skill-directory>/scripts/check_brief.py ./.deep-solve-prep/BRIEFS.md --id <id>` exits 0. It fails on any `<...>` placeholder, a missing required section, an "and" that joins two actions in the Question, an adjective from its vague-word list with no number nearby in the Question or Success criteria, a purpose word, a prime-agent vocabulary collision used for the user's concept, a standing authorization that must be a human gate, a conversation gate, an Inputs entry with no "(proved by: ...)" note or that points off this machine, an unnumbered Budget, and a title under 10 words. It cannot tell whether a named parameter set exists or whether data covers the stated range; those are the user's stated inputs (see 2).
+2. Every path under Inputs was proven in THIS session by a command you ran or the user pasted (`ls`, `du -sh`, `head`, `git log -1`). Record the command and its first line of output next to the path. A path you did not see does not count. Proof means presence and shape (the path exists, is readable, has the stated extension or layout, and a size you recorded); it does not mean you validated the content. Content claims (coin count, date range, that a named parameter set is defined somewhere) are the user's stated inputs: write them as "user states: ..." and let the deep-solve run's first round confirm them. If the size you saw cannot possibly hold what the user states (a 16 KB directory for 40 coins of hourly history), say so in the scoreboard; the user decides whether that is a stand-in or a blocker.
 3. Every brief this one depends on is either `READY` or already has a `SOLUTION.md`.
 4. The user answered "yes" to the exact question: "If `verify.sh` ran these checks and passed, would you believe the answer?" Quote their answer in `NOTES.md` under "Yes record" with the brief id.
 5. Human gates are written, and nothing in the brief authorizes money, production writes, deletion, or messages to third parties.
@@ -95,9 +95,11 @@ Every turn has the same shape, in this order, and nothing else:
 3. **Scoreboard**: one line per brief: `<id>  <STATE>  <what is missing, or "ready">`. Before any brief exists, one line: `no briefs yet; <n> candidate questions identified`. If nothing changed since the last turn, one line: `unchanged: <summary>`; do not repeat the board.
 4. **Questions**: numbered, at most 5, each one chosen because its answer changes a brief's state. For each, say which brief and which blank it fills.
 
-Or, when a brief is `READY`: the paste block from the readiness gate replaces section 4. The scoreboard still appears.
+Two exceptions to the shape:
+- When a brief is `READY`: the paste block from the readiness gate replaces section 4. The scoreboard still appears. This turn is as long as the brief; that is the one turn allowed to be long.
+- When the user asks to skip ahead: the whole turn is two lines. Line 1 is the one-line scoreboard entry for the brief they want (`<id>  <STATE>  <what is missing>`). Line 2 is the single question that would move it. No Learned, no Wrote.
 
-Keep each turn short. The user is answering questions, not reading essays. No preamble, no restating the method, no praise.
+Otherwise keep each turn short. The user is answering questions, not reading essays. No preamble, no restating the method, no praise.
 
 ### Phase 1. Saturate
 
@@ -116,7 +118,8 @@ Goal: find the separable questions inside the vision.
 
 - List every distinct thing the user wants done. For each, classify it: **research question** (unknown answer, testable), **engineering task** (known how, needs doing), **prerequisite** (data, access, environment), **decision** (only the user can make it), **operations** (deploy, monitor, run). Only research questions become `/deep-solve` briefs. Say which items are which and why.
 - Find the dependency order. Which question's answer do the others need? Usually a validation or measurement method comes first: without a trusted way to tell good from bad, every later brief's `verify.sh` is unfounded.
-- For each candidate brief, propose the one-sentence question and ask the user to accept, sharpen, or split it. Split anything with "and" in the question.
+- For each candidate brief, propose the one-sentence question and ask the user to accept, sharpen, or split it. Split anything that joins two actions with "and". The decomposition is confirmed when the user answers that question, or when they answer Phase 3 questions about the brief without objecting to its question; substantive answers are acceptance. Do not spend a turn asking for a bare "yes" to the decomposition.
+- Bundling is allowed. If the material already settles Phase 1 and the first brief is obvious, a turn may propose the decomposition and ask the first Phase 3 questions for the lead brief at once, within the 5-question cap. The phase-order rule forbids asking Phase 3 questions about a brief whose question the user has not yet seen; it does not forbid asking them in the same turn you propose it.
 - Flag anything that must never be automated without a human step (money, production data, irreversible deletes, messages to third parties). Write it under "Human gates" in `NOTES.md`.
 
 ### Phase 3. Sharpen each brief
@@ -159,9 +162,9 @@ Produce, in `./.deep-solve-prep/`:
 - `BRIEFS.md`: the briefs in run order, each pasteable as `/deep-solve <brief>`. Each brief's "Context" section tells the deep-solve agent to read `CHARTER.md` and `NOTES.md` first.
 - `PLAN.md`: the phased sequence: prerequisites and engineering tasks that are not briefs, the briefs in order, the human gates, and what happens after the briefs (build sprints, deployment) so the user sees the whole road, not just the research.
 
-Hand-off happens per brief, the moment it is `READY`, using the paste block from the readiness gate; do not hold a ready brief back until all briefs are done. Fire order is dependency order, and the block says which to fire first when several are ready. Offer once to persist the durable facts from `NOTES.md` as local harness memories (`rlm.harness.create_memory`, titles carrying the domain vocabulary) so the deep-solve run starts with them in its digest; do it only if the user says yes. The `deep-solve` skill reads `./.deep-solve-prep/BRIEFS.md` and `CHARTER.md` when they exist, so leave them in place.
+Hand-off happens per brief, the moment it is `READY`, using the paste block from the readiness gate; do not hold a ready brief back until all briefs are done. Fire order is dependency order, and the block says which to fire first when several are ready. On the first `READY` turn, add one line after the paste block: "Reply `memories` and I will store the durable facts from NOTES.md as local harness memories before you fire it." Do it only if the user says so; do not ask again. The `deep-solve` skill reads `./.deep-solve-prep/BRIEFS.md` and `CHARTER.md` when they exist, so leave them in place.
 
-Write `PLAN.md` when the first brief becomes `READY` and update it as others do. Write `CHARTER.md` as soon as Phase 1 is confirmed by the user; it does not wait for briefs.
+Write `PLAN.md` when the first brief becomes `READY` and update it as others do. Write `CHARTER.md` after the first turn in which the user answers substantively (that is the confirmation of Phase 1); it does not wait for briefs, and it is revised whenever a fact changes.
 
 ## Rules
 

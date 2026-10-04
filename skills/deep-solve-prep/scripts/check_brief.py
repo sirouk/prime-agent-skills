@@ -117,8 +117,8 @@ def check_brief(brief_id: str, body: str) -> list[str]:
     defects: list[str] = []
     title = body.splitlines()[0].strip()
     title_words = title[len("/deep-solve "):].split()
-    if len(title_words) < 8:
-        defects.append(f"title has {len(title_words)} words; under 8 means it carries too little domain vocabulary")
+    if len(title_words) < 10:
+        defects.append(f"title has {len(title_words)} words; under 10 means it carries too little domain vocabulary (name the system, the method, the component)")
 
     for name in REQUIRED_SECTIONS:
         if name not in body:
